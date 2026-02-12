@@ -1,6 +1,6 @@
 @echo off
 echo ==========================================
-echo Building SimplePlugin for Unity (x64)
+echo Building OpenCvPlugin for Unity (x64)
 echo ==========================================
 
 :: 1. Create Build Directory
@@ -17,6 +17,6 @@ cmake --build . --config Debug
 
 echo ==========================================
 echo Build Complete!
-echo Check the 'build/output/Release' (or just 'build/Release') folder for SimplePlugin.dll
+echo Check 'build/Release' for OpenCvPlugin.dll
 echo ==========================================
 pause
