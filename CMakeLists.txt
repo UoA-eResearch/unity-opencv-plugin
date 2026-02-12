@@ -1,6 +1,12 @@
 cmake_minimum_required(VERSION 4.2)
 
-project(DanceVisPlugin)
+set(PROJECT_NAME "OpenCvPlugin")
+
+project(${PROJECT_NAME}
+    VERSION 1.0
+    DESCRIPTION "A plugin that uses OpenCV for computer vision tasks"
+    LANGUAGES CXX
+)
 
 # 1. Point CMake to the folder containing 'OpenCVConfig.cmake'
 #    (Adjust this path if your extraction location is different)
@@ -10,7 +16,12 @@ set(OpenCV_DIR "C:/dev/libs/opencv/opencv-4.12.0/build/x64/vc16/lib")
 find_package(OpenCV REQUIRED)
 
 # 3. Define the Plugin
-add_library(DanceVisPlugin SHARED source/DanceVisPlugin.cpp)
+add_library(${PROJECT_NAME} SHARED 
+    source/OpenCvPlugin.cpp
+    source/OpenCvPlugin.h
+    source/pnp/PnPContext.cpp
+    source/pnp/PnPContext.h
+)
 
 # 4. Link OpenCV libraries to your plugin
-target_link_libraries(DanceVisPlugin ${OpenCV_LIBS})
+target_link_libraries(${PROJECT_NAME} ${OpenCV_LIBS})
