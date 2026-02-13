@@ -50,9 +50,9 @@ typedef void* OcpPnPContext;
 //   OCP_CATCH(ctx)
 //
 // Requirements: `ctx` must be a pointer to a struct that has a
-// `char errorMsg[OCP_ERROR_MSG_SIZE]` member.
+// `std::array<char, OCP_ERROR_MSG_SIZE>` member.
 
-#define OCP_ERROR_MSG_SIZE 512
+constexpr int OCP_ERROR_MSG_SIZE = 512;
 
 // Helper: safely copy a message into a fixed-size error buffer.
 inline void ocp_SetError(char* errorMsg, const char* msg) {
@@ -76,14 +76,14 @@ inline void ocp_SetError(char* errorMsg, const char* msg) {
 
 #define OCP_CATCH(ctx)                                                        \
     catch (const cv::Exception& e) {                                          \
-        ocp_SetError((ctx)->errorMsg, e.what());                              \
+        ocp_SetError((ctx)->errorMsg.data(), e.what());                       \
         return OCP_ERROR_OPENCV;                                              \
     }                                                                         \
     catch (const std::exception& e) {                                         \
-        ocp_SetError((ctx)->errorMsg, e.what());                              \
+        ocp_SetError((ctx)->errorMsg.data(), e.what());                       \
         return OCP_ERROR_UNKNOWN;                                             \
     }                                                                         \
     catch (...) {                                                              \
-        ocp_SetError((ctx)->errorMsg, "Unknown non-C++ exception");           \
+        ocp_SetError((ctx)->errorMsg.data(), "Unknown non-C++ exception");    \
         return OCP_ERROR_UNKNOWN;                                             \
     }

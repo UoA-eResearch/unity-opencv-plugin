@@ -42,20 +42,20 @@ static int validateCommonArgs(PnPContextInternal* ctx,
                                const float* tvecInOut)
 {
     if (!objectPoints || !imagePoints || !cameraMatrix || !rvecInOut || !tvecInOut) {
-        ocp_SetError(ctx->errorMsg, "Null pointer passed for a required argument");
+        ocp_SetError(ctx->errorMsg.data(), "Null pointer passed for a required argument");
         return OCP_ERROR_INVALID_ARGS;
     }
     if (count <= 0) {
-        ocp_SetError(ctx->errorMsg, "Point count must be > 0");
+        ocp_SetError(ctx->errorMsg.data(), "Point count must be > 0");
         return OCP_ERROR_INVALID_ARGS;
     }
     if (count > ctx->maxPoints) {
-        snprintf(ctx->errorMsg, OCP_ERROR_MSG_SIZE,
+        snprintf(ctx->errorMsg.data(), OCP_ERROR_MSG_SIZE,
                  "Point count %d exceeds context maximum %d", count, ctx->maxPoints);
         return OCP_ERROR_INVALID_ARGS;
     }
     if (distCoeffCount != 0 && distCoeffCount != 5) {
-        ocp_SetError(ctx->errorMsg, "distCoeffCount must be 0 or 5");
+        ocp_SetError(ctx->errorMsg.data(), "distCoeffCount must be 0 or 5");
         return OCP_ERROR_INVALID_ARGS;
     }
     return OCP_OK;
@@ -97,7 +97,7 @@ OCP_EXPORT const char* OCP_PnP_GetLastError(OcpPnPContext handle)
 {
     if (!handle) return "Null context handle";
     auto* ctx = static_cast<PnPContextInternal*>(handle);
-    return ctx->errorMsg;
+    return ctx->errorMsg.data();
 }
 
 // -- SolvePnP (wraps cv::solvePnPGeneric) ------------------------------------
@@ -160,7 +160,7 @@ OCP_EXPORT int OCP_PnP_Solve(
         );
 
         if (numSolutions <= 0) {
-            ocp_SetError(ctx->errorMsg, "solvePnPGeneric returned no solutions");
+            ocp_SetError(ctx->errorMsg.data(), "solvePnPGeneric returned no solutions");
             return OCP_SOLVE_FAILED;
         }
 
@@ -247,7 +247,7 @@ OCP_EXPORT int OCP_PnP_SolveRansac(
         );
 
         if (!ok) {
-            ocp_SetError(ctx->errorMsg, "solvePnPRansac returned false (no solution)");
+            ocp_SetError(ctx->errorMsg.data(), "solvePnPRansac returned false (no solution)");
             return OCP_SOLVE_FAILED;
         }
 
@@ -297,16 +297,16 @@ OCP_EXPORT int OCP_PnP_ProjectPoints(
     ctx->errorMsg[0] = '\0';
 
     if (!objectPoints || !rvec || !tvec || !cameraMatrix || !projectedPointsOut) {
-        ocp_SetError(ctx->errorMsg, "Null pointer passed for a required argument");
+        ocp_SetError(ctx->errorMsg.data(), "Null pointer passed for a required argument");
         return OCP_ERROR_INVALID_ARGS;
     }
     if (count <= 0 || count > ctx->maxPoints) {
-        snprintf(ctx->errorMsg, OCP_ERROR_MSG_SIZE,
+        snprintf(ctx->errorMsg.data(), OCP_ERROR_MSG_SIZE,
                  "Point count %d out of valid range [1, %d]", count, ctx->maxPoints);
         return OCP_ERROR_INVALID_ARGS;
     }
     if (distCoeffCount != 0 && distCoeffCount != 5) {
-        ocp_SetError(ctx->errorMsg, "distCoeffCount must be 0 or 5");
+        ocp_SetError(ctx->errorMsg.data(), "distCoeffCount must be 0 or 5");
         return OCP_ERROR_INVALID_ARGS;
     }
 

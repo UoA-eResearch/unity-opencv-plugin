@@ -12,6 +12,7 @@
 
 #include <opencv2/core.hpp>
 
+#include <array>
 #include <vector>
 
 struct PnPContextInternal {
@@ -27,5 +28,5 @@ struct PnPContextInternal {
     int maxPoints;
 
     // Per-context error message buffer, read via OCP_PnP_GetLastError.
-    char errorMsg[OCP_ERROR_MSG_SIZE];
+    std::array<char, OCP_ERROR_MSG_SIZE> errorMsg;
 };
