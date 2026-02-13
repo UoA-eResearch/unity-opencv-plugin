@@ -23,5 +23,8 @@ add_library(${PROJECT_NAME} SHARED
     source/pnp/PnPContext.h
 )
 
-# 4. Link OpenCV libraries to your plugin
+# 4. Allow #include paths relative to source/
+target_include_directories(${PROJECT_NAME} PRIVATE ${CMAKE_SOURCE_DIR}/source)
+
+# 5. Link OpenCV libraries to your plugin
 target_link_libraries(${PROJECT_NAME} ${OpenCV_LIBS})
