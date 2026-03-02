@@ -75,56 +75,14 @@ namespace OpenCvPlugin.PnP
             [In, Out] double[] tvecInOut);
 
         /// <summary>
-        /// Solves PnP with RANSAC outlier rejection using cv::solvePnPRansac.
-        /// Returns inlier indices and inlier count for diagnostic purposes.
-        /// </summary>
-        /// <param name="handle">PnP context handle from OCP_PnP_CreateContext</param>
-        /// <param name="objectPoints">3D points in object coordinates (x,y,z flat array, length = count*3)</param>
-        /// <param name="imagePoints">2D points in image coordinates (x,y flat array, length = count*2)</param>
-        /// <param name="count">Number of point correspondences (4-maxPoints)</param>
-        /// <param name="cameraMatrix">Camera intrinsic matrix as 3x3 row-major array (9 floats): [fx,0,cx, 0,fy,cy, 0,0,1]</param>
-        /// <param name="distCoeffs">Distortion coefficients [k1,k2,p1,p2,k3] or null for no distortion. Length must be 0 or 5.</param>
-        /// <param name="distCoeffCount">Number of distortion coefficients (0 or 5)</param>
-        /// <param name="method">Solver algorithm for RANSAC kernel (SOLVEPNP_EPNP, SOLVEPNP_ITERATIVE, etc.)</param>
-        /// <param name="useExtrinsicGuess">If non-zero, uses rvecInOut/tvecInOut as initial guess</param>
-        /// <param name="iterationsCount">RANSAC iterations (100-1000 recommended)</param>
-        /// <param name="reprojThreshold">RANSAC inlier threshold in pixels (1.0-8.0 recommended)</param>
-        /// <param name="confidence">RANSAC confidence level (0.90-0.999 recommended)</param>
-        /// <param name="rvecInOut">Input/output rotation vector [rx,ry,rz] (Rodrigues)</param>
-        /// <param name="tvecInOut">Input/output translation vector [tx,ty,tz]</param>
-        /// <param name="inliersOut">Output buffer for inlier indices (caller-allocated, length = maxInliers)</param>
-        /// <param name="inlierCountOut">Output array [1 element] for number of inliers found</param>
-        /// <param name="maxInliers">Maximum capacity of inliersOut array (typically = point count)</param>
-        /// <returns>Status code: OCP_OK (0) on success, OCP_SOLVE_FAILED (1) if no solution, negative on error</returns>
-        [DllImport(DLL_NAME, CallingConvention = CallingConvention.Cdecl)]
-        public static extern int OCP_PnP_SolveRansac(
-            IntPtr handle,
-            [In] float[] objectPoints,
-            [In] float[] imagePoints,
-            int count,
-            [In] float[] cameraMatrix,
-            [In] float[] distCoeffs,
-            int distCoeffCount,
-            int method,
-            int useExtrinsicGuess,
-            int iterationsCount,
-            float reprojThreshold,
-            double confidence,
-            [In, Out] float[] rvecInOut,
-            [In, Out] float[] tvecInOut,
-            [Out] int[] inliersOut,
-            [Out] int[] inlierCountOut,
-            int maxInliers);
-
-        /// <summary>
         /// Projects 3D points to 2D using cv::projectPoints.
         /// Useful for manual reprojection error calculation or visualization.
         /// </summary>
         /// <param name="handle">PnP context handle from OCP_PnP_CreateContext</param>
         /// <param name="objectPoints">3D points in object coordinates (x,y,z flat array, length = count*3)</param>
         /// <param name="count">Number of points to project (1-maxPoints)</param>
-        /// <param name="rvec">Rotation vector [rx,ry,rz] (Rodrigues)</param>
-        /// <param name="tvec">Translation vector [tx,ty,tz]</param>
+        /// <param name="rvec">Rotation vector [rx,ry,rz] as double[3] (Rodrigues). Matches OpenCV's native CV_64F.</param>
+        /// <param name="tvec">Translation vector [tx,ty,tz] as double[3]. Matches OpenCV's native CV_64F.</param>
         /// <param name="cameraMatrix">Camera intrinsic matrix as 3x3 row-major array (9 floats): [fx,0,cx, 0,fy,cy, 0,0,1]</param>
         /// <param name="distCoeffs">Distortion coefficients [k1,k2,p1,p2,k3] or null for no distortion. Length must be 0 or 5.</param>
         /// <param name="distCoeffCount">Number of distortion coefficients (0 or 5)</param>
@@ -135,8 +93,8 @@ namespace OpenCvPlugin.PnP
             IntPtr handle,
             [In] float[] objectPoints,
             int count,
-            [In] float[] rvec,
-            [In] float[] tvec,
+            [In] double[] rvec,
+            [In] double[] tvec,
             [In] float[] cameraMatrix,
             [In] float[] distCoeffs,
             int distCoeffCount,
