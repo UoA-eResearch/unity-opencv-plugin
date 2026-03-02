@@ -23,13 +23,11 @@ namespace OpenCvPlugin.PnP
         public const int SOLVEPNP_SQPNP = 8;
 
         /// <summary>
-        /// Creates a PnP context with pre-allocated buffers for up to maxPoints points.
-        /// This eliminates per-frame allocations - all math happens in pre-allocated memory.
+        /// Creates a PnP context for error reporting.
         /// </summary>
-        /// <param name="maxPoints">Maximum number of points the context will handle (4-1000 recommended)</param>
         /// <returns>Opaque context handle. Caller must call OCP_PnP_DestroyContext when done.</returns>
         [DllImport(DLL_NAME, CallingConvention = CallingConvention.Cdecl)]
-        public static extern IntPtr OCP_PnP_CreateContext(int maxPoints);
+        public static extern IntPtr OCP_PnP_CreateContext();
 
         /// <summary>
         /// Destroys a PnP context and frees all associated memory.
@@ -47,21 +45,20 @@ namespace OpenCvPlugin.PnP
         public static extern IntPtr OCP_PnP_GetLastError(IntPtr handle);
 
         /// <summary>
-        /// Solves Pose-n-Perspective problem using cv::solvePnPGeneric.
+        /// Solves Pose-n-Perspective problem using cv::solvePnP.
         /// Supports multiple solver algorithms and temporal coherence via extrinsic guess.
         /// </summary>
         /// <param name="handle">PnP context handle from OCP_PnP_CreateContext</param>
         /// <param name="objectPoints">3D points in object coordinates (x,y,z flat array, length = count*3)</param>
         /// <param name="imagePoints">2D points in image coordinates (x,y flat array, length = count*2)</param>
-        /// <param name="count">Number of point correspondences (4-maxPoints)</param>
+        /// <param name="count">Number of point correspondences (minimum 4)</param>
         /// <param name="cameraMatrix">Camera intrinsic matrix as 3x3 row-major array (9 floats): [fx,0,cx, 0,fy,cy, 0,0,1]</param>
-        /// <param name="distCoeffs">Distortion coefficients [k1,k2,p1,p2,k3] or null for no distortion. Length must be 0 or 5.</param>
+        /// <param name="distCoeffs">Distortion coefficients [k1,k2,p1,p2,k3] or dummy array for no distortion. Length must be 0 or 5.</param>
         /// <param name="distCoeffCount">Number of distortion coefficients (0 or 5)</param>
         /// <param name="method">Solver algorithm (SOLVEPNP_SQPNP, SOLVEPNP_ITERATIVE, etc.)</param>
         /// <param name="useExtrinsicGuess">If non-zero, uses rvecInOut/tvecInOut as initial guess (enables temporal coherence)</param>
-        /// <param name="rvecInOut">Input/output rotation vector [rx,ry,rz] (Rodrigues). Use prior frame's rvec for temporal coherence.</param>
-        /// <param name="tvecInOut">Input/output translation vector [tx,ty,tz]. Use prior frame's tvec for temporal coherence.</param>
-        /// <param name="reprojErrorOut">Output array [1 element] for mean reprojection error in pixels</param>
+        /// <param name="rvecInOut">Input/output rotation vector [rx,ry,rz] as double[3] (Rodrigues). Matches OpenCV's native CV_64F.</param>
+        /// <param name="tvecInOut">Input/output translation vector [tx,ty,tz] as double[3]. Matches OpenCV's native CV_64F.</param>
         /// <returns>Status code: OCP_OK (0) on success, OCP_SOLVE_FAILED (1) if no solution, negative on error</returns>
         [DllImport(DLL_NAME, CallingConvention = CallingConvention.Cdecl)]
         public static extern int OCP_PnP_Solve(
@@ -74,9 +71,8 @@ namespace OpenCvPlugin.PnP
             int distCoeffCount,
             int method,
             int useExtrinsicGuess,
-            [In, Out] float[] rvecInOut,
-            [In, Out] float[] tvecInOut,
-            [Out] float[] reprojErrorOut);
+            [In, Out] double[] rvecInOut,
+            [In, Out] double[] tvecInOut);
 
         /// <summary>
         /// Solves PnP with RANSAC outlier rejection using cv::solvePnPRansac.

@@ -6,31 +6,13 @@
 
 #include <opencv2/calib3d.hpp>
 
-#include <cstdio>   // snprintf
+#include <vector>   // std::vector (used locally by ProjectPoints, SolveRansac)
 
 // ---------------------------------------------------------------------------
 // Helpers (internal, not exported)
 // ---------------------------------------------------------------------------
 
-// Copy flat float arrays into the context's pre-allocated OpenCV vectors.
-// objPts: [x0,y0,z0, x1,y1,z1, ...]   imgPts: [u0,v0, u1,v1, ...]
-static void copyPointsIn(PnPContextInternal* ctx,
-                          const float* objectPoints,
-                          const float* imagePoints,
-                          int count)
-{
-    ctx->objPts.resize(count);
-    ctx->imgPts.resize(count);
-    for (int i = 0; i < count; i++) {
-        ctx->objPts[i] = cv::Point3f(objectPoints[i * 3],
-                                      objectPoints[i * 3 + 1],
-                                      objectPoints[i * 3 + 2]);
-        ctx->imgPts[i] = cv::Point2f(imagePoints[i * 2],
-                                      imagePoints[i * 2 + 1]);
-    }
-}
-
-// Validate common arguments shared by Solve and SolveRansac.
+// Validate common arguments shared by Solve, SolveRansac, etc.
 // Returns OCP_OK if valid, or an error code (and fills errorMsg).
 static int validateCommonArgs(PnPContextInternal* ctx,
                                const float* objectPoints,
@@ -38,8 +20,8 @@ static int validateCommonArgs(PnPContextInternal* ctx,
                                int count,
                                const float* cameraMatrix,
                                int distCoeffCount,
-                               const float* rvecInOut,
-                               const float* tvecInOut)
+                               const void* rvecInOut,
+                               const void* tvecInOut)
 {
     if (!objectPoints || !imagePoints || !cameraMatrix || !rvecInOut || !tvecInOut) {
         ocp_SetError(ctx->errorMsg.data(), "Null pointer passed for a required argument");
@@ -47,11 +29,6 @@ static int validateCommonArgs(PnPContextInternal* ctx,
     }
     if (count <= 0) {
         ocp_SetError(ctx->errorMsg.data(), "Point count must be > 0");
-        return OCP_ERROR_INVALID_ARGS;
-    }
-    if (count > ctx->maxPoints) {
-        snprintf(ctx->errorMsg.data(), OCP_ERROR_MSG_SIZE,
-                 "Point count %d exceeds context maximum %d", count, ctx->maxPoints);
         return OCP_ERROR_INVALID_ARGS;
     }
     if (distCoeffCount != 0 && distCoeffCount != 5) {
@@ -69,17 +46,11 @@ extern "C" {
 
 // -- Lifecycle ---------------------------------------------------------------
 
-OCP_EXPORT OcpPnPContext OCP_PnP_CreateContext(int maxPoints)
+OCP_EXPORT OcpPnPContext OCP_PnP_CreateContext()
 {
-    if (maxPoints <= 0) return nullptr;
-
     auto* ctx = new (std::nothrow) PnPContextInternal();
     if (!ctx) return nullptr;
 
-    ctx->maxPoints = maxPoints;
-    ctx->objPts.reserve(maxPoints);
-    ctx->imgPts.reserve(maxPoints);
-    ctx->projPts.reserve(maxPoints);
     ctx->errorMsg[0] = '\0';
 
     return static_cast<OcpPnPContext>(ctx);
@@ -100,7 +71,7 @@ OCP_EXPORT const char* OCP_PnP_GetLastError(OcpPnPContext handle)
     return ctx->errorMsg.data();
 }
 
-// -- SolvePnP (wraps cv::solvePnPGeneric) ------------------------------------
+// -- SolvePnP (wraps cv::solvePnP) -------------------------------------------
 
 OCP_EXPORT int OCP_PnP_Solve(
     OcpPnPContext handle,
@@ -112,82 +83,56 @@ OCP_EXPORT int OCP_PnP_Solve(
     int distCoeffCount,             // 0 or 5
     int method,                     // cv::SolvePnPMethod enum value (0=ITERATIVE, 1=EPNP, 8=SQPNP)
     int useExtrinsicGuess,          // If non-zero, rvecInOut/tvecInOut are read as initial guess
-    float* rvecInOut,               // In/Out: 3-float rotation vector (Rodrigues)
-    float* tvecInOut,               // In/Out: 3-float translation vector
-    float* reprojErrorOut           // Out: RMS reprojection error (may be null)
+    double* rvecInOut,              // In/Out: 3-double rotation vector (Rodrigues)
+    double* tvecInOut               // In/Out: 3-double translation vector
 )
 {
     if (!handle) return OCP_ERROR_INVALID_ARGS;
     auto* ctx = static_cast<PnPContextInternal*>(handle);
     ctx->errorMsg[0] = '\0';
 
-    // Validate inputs
     int v = validateCommonArgs(ctx, objectPoints, imagePoints, count,
                                 cameraMatrix, distCoeffCount, rvecInOut, tvecInOut);
     if (v != OCP_OK) return v;
 
     OCP_TRY(ctx)
     {
-        // Copy points into pre-allocated vectors
-        copyPointsIn(ctx, objectPoints, imagePoints, count);
+        // Zero-copy: wrap caller's pinned managed arrays as cv::Mat headers.
+        // matReadOnly isolates the const_cast needed by cv::Mat's constructor.
+        cv::Mat objMat  = matReadOnly(count, 1, CV_32FC3, objectPoints);
+        cv::Mat imgMat  = matReadOnly(count, 1, CV_32FC2, imagePoints);
+        cv::Mat camMat  = matReadOnly(3, 3, CV_32F, cameraMatrix);
 
-        // Wrap caller's camera matrix and distortion as cv::Mat (no copy)
-        cv::Mat camMat(3, 3, CV_32F, const_cast<float*>(cameraMatrix));
         cv::Mat dist;
         if (distCoeffCount > 0 && distCoeffs) {
-            dist = cv::Mat(1, distCoeffCount, CV_32F, const_cast<float*>(distCoeffs));
+            dist = matReadOnly(1, distCoeffCount, CV_32F, distCoeffs);
         }
 
-        // Prepare initial guess if requested
-        // solvePnPGeneric expects double Mats for rvec/tvec guess
-        cv::Mat rvecGuess, tvecGuess;
-        if (useExtrinsicGuess) {
-            rvecGuess = (cv::Mat_<double>(3, 1) << rvecInOut[0], rvecInOut[1], rvecInOut[2]);
-            tvecGuess = (cv::Mat_<double>(3, 1) << tvecInOut[0], tvecInOut[1], tvecInOut[2]);
-        }
+        // Wrap caller's double* buffers directly. cv::solvePnP writes results
+        // in-place via OutputArray (no reallocation when shape/type match CV_64F).
+        cv::Mat rvec(3, 1, CV_64F, rvecInOut);
+        cv::Mat tvec(3, 1, CV_64F, tvecInOut);
 
-        // Call solvePnPGeneric — returns all solutions with reprojection errors
-        std::vector<cv::Mat> rvecs, tvecs;
-        cv::Mat reprojErrors;
-
-        int numSolutions = cv::solvePnPGeneric(
-            ctx->objPts, ctx->imgPts, camMat, dist,
-            rvecs, tvecs,
+        bool ok = cv::solvePnP(
+            objMat, imgMat, camMat, dist,
+            rvec, tvec,
             useExtrinsicGuess != 0,
-            static_cast<cv::SolvePnPMethod>(method),
-            rvecGuess, tvecGuess,
-            reprojErrors
+            static_cast<cv::SolvePnPMethod>(method)
         );
 
-        if (numSolutions <= 0) {
-            ocp_SetError(ctx->errorMsg.data(), "solvePnPGeneric returned no solutions");
+        if (!ok) {
+            ocp_SetError(ctx->errorMsg.data(), "solvePnP returned false (no solution)");
             return OCP_SOLVE_FAILED;
         }
 
-        // Take the first (best) solution
-        const cv::Mat& rvec = rvecs[0];
-        const cv::Mat& tvec = tvecs[0];
-
-        // Copy results back to caller's buffers (OpenCV PnP output is CV_64F)
-        rvecInOut[0] = static_cast<float>(rvec.at<double>(0));
-        rvecInOut[1] = static_cast<float>(rvec.at<double>(1));
-        rvecInOut[2] = static_cast<float>(rvec.at<double>(2));
-
-        tvecInOut[0] = static_cast<float>(tvec.at<double>(0));
-        tvecInOut[1] = static_cast<float>(tvec.at<double>(1));
-        tvecInOut[2] = static_cast<float>(tvec.at<double>(2));
-
-        // Reprojection error (per-solution RMS)
-        if (reprojErrorOut) {
-            *reprojErrorOut = static_cast<float>(reprojErrors.at<double>(0));
-        }
-
+        // Results already written to caller's rvecInOut/tvecInOut buffers.
         return OCP_OK;
     }
     OCP_CATCH(ctx)
 }
 
 // -- SolvePnPRansac (wraps cv::solvePnPRansac) --------------------------------
+// TODO: Refactor to match Solve pattern (zero-copy double* rvec/tvec)
 
 OCP_EXPORT int OCP_PnP_SolveRansac(
     OcpPnPContext handle,
@@ -219,12 +164,13 @@ OCP_EXPORT int OCP_PnP_SolveRansac(
 
     OCP_TRY(ctx)
     {
-        copyPointsIn(ctx, objectPoints, imagePoints, count);
-
-        cv::Mat camMat(3, 3, CV_32F, const_cast<float*>(cameraMatrix));
+        // Zero-copy: wrap caller's arrays as cv::Mat headers
+        cv::Mat objMat  = matReadOnly(count, 1, CV_32FC3, objectPoints);
+        cv::Mat imgMat  = matReadOnly(count, 1, CV_32FC2, imagePoints);
+        cv::Mat camMat  = matReadOnly(3, 3, CV_32F, cameraMatrix);
         cv::Mat dist;
         if (distCoeffCount > 0 && distCoeffs) {
-            dist = cv::Mat(1, distCoeffCount, CV_32F, const_cast<float*>(distCoeffs));
+            dist = matReadOnly(1, distCoeffCount, CV_32F, distCoeffs);
         }
 
         cv::Mat rvec, tvec;
@@ -236,7 +182,7 @@ OCP_EXPORT int OCP_PnP_SolveRansac(
         cv::Mat inliersMat;
 
         bool ok = cv::solvePnPRansac(
-            ctx->objPts, ctx->imgPts, camMat, dist,
+            objMat, imgMat, camMat, dist,
             rvec, tvec,
             useExtrinsicGuess != 0,
             iterationsCount,
@@ -279,6 +225,7 @@ OCP_EXPORT int OCP_PnP_SolveRansac(
 }
 
 // -- ProjectPoints (wraps cv::projectPoints) ---------------------------------
+// TODO: Refactor to match Solve pattern (zero-copy double* rvec/tvec)
 
 OCP_EXPORT int OCP_PnP_ProjectPoints(
     OcpPnPContext handle,
@@ -300,9 +247,8 @@ OCP_EXPORT int OCP_PnP_ProjectPoints(
         ocp_SetError(ctx->errorMsg.data(), "Null pointer passed for a required argument");
         return OCP_ERROR_INVALID_ARGS;
     }
-    if (count <= 0 || count > ctx->maxPoints) {
-        snprintf(ctx->errorMsg.data(), OCP_ERROR_MSG_SIZE,
-                 "Point count %d out of valid range [1, %d]", count, ctx->maxPoints);
+    if (count <= 0) {
+        ocp_SetError(ctx->errorMsg.data(), "Point count must be > 0");
         return OCP_ERROR_INVALID_ARGS;
     }
     if (distCoeffCount != 0 && distCoeffCount != 5) {
@@ -312,29 +258,23 @@ OCP_EXPORT int OCP_PnP_ProjectPoints(
 
     OCP_TRY(ctx)
     {
-        // Build object points vector
-        ctx->objPts.resize(count);
-        for (int i = 0; i < count; i++) {
-            ctx->objPts[i] = cv::Point3f(objectPoints[i * 3],
-                                          objectPoints[i * 3 + 1],
-                                          objectPoints[i * 3 + 2]);
-        }
-
+        // Zero-copy: wrap caller's arrays as cv::Mat headers
+        cv::Mat objMat  = matReadOnly(count, 1, CV_32FC3, objectPoints);
         cv::Mat rvecMat = (cv::Mat_<double>(3, 1) << rvec[0], rvec[1], rvec[2]);
         cv::Mat tvecMat = (cv::Mat_<double>(3, 1) << tvec[0], tvec[1], tvec[2]);
-        cv::Mat camMat(3, 3, CV_32F, const_cast<float*>(cameraMatrix));
+        cv::Mat camMat  = matReadOnly(3, 3, CV_32F, cameraMatrix);
         cv::Mat dist;
         if (distCoeffCount > 0 && distCoeffs) {
-            dist = cv::Mat(1, distCoeffCount, CV_32F, const_cast<float*>(distCoeffs));
+            dist = matReadOnly(1, distCoeffCount, CV_32F, distCoeffs);
         }
 
-        ctx->projPts.resize(count);
-        cv::projectPoints(ctx->objPts, rvecMat, tvecMat, camMat, dist, ctx->projPts);
+        std::vector<cv::Point2f> projPts;
+        cv::projectPoints(objMat, rvecMat, tvecMat, camMat, dist, projPts);
 
         // Copy results to caller's flat array
         for (int i = 0; i < count; i++) {
-            projectedPointsOut[i * 2]     = ctx->projPts[i].x;
-            projectedPointsOut[i * 2 + 1] = ctx->projPts[i].y;
+            projectedPointsOut[i * 2]     = projPts[i].x;
+            projectedPointsOut[i * 2 + 1] = projPts[i].y;
         }
 
         return OCP_OK;

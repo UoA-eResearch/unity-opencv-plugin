@@ -35,14 +35,36 @@ namespace OpenCvPlugin
                 return Quaternion.identity;
             }
 
+            return RodriguesToQuaternion(rvec[0], rvec[1], rvec[2]);
+        }
+
+        /// <summary>
+        /// Converts Rodrigues rotation vector (angle-axis) to Quaternion.
+        /// Accepts double[] to match OpenCV's native CV_64F precision.
+        /// </summary>
+        /// <param name="rvec">Rotation vector (Rodrigues format) [rx, ry, rz] as double[3]</param>
+        /// <returns>Quaternion representation of the rotation</returns>
+        public static Quaternion RodriguesToQuaternion(double[] rvec)
+        {
+            if (rvec == null || rvec.Length != 3)
+            {
+                Debug.LogError("rvec must be double[3]");
+                return Quaternion.identity;
+            }
+
+            return RodriguesToQuaternion((float)rvec[0], (float)rvec[1], (float)rvec[2]);
+        }
+
+        private static Quaternion RodriguesToQuaternion(float rx, float ry, float rz)
+        {
             // Calculate rotation angle (magnitude of rotation vector)
-            float angle = Mathf.Sqrt(rvec[0] * rvec[0] + rvec[1] * rvec[1] + rvec[2] * rvec[2]);
+            float angle = Mathf.Sqrt(rx * rx + ry * ry + rz * rz);
             
             if (angle < 0.0001f)
                 return Quaternion.identity;
 
             // Normalize axis
-            Vector3 axis = new Vector3(rvec[0] / angle, rvec[1] / angle, rvec[2] / angle);
+            Vector3 axis = new Vector3(rx / angle, ry / angle, rz / angle);
 
             // Convert to quaternion (angle is in radians, convert to degrees for Unity)
             return Quaternion.AngleAxis(angle * Mathf.Rad2Deg, axis);
@@ -128,6 +150,18 @@ namespace OpenCvPlugin
         }
 
         /// <summary>
+        /// Converts OpenCV Rodrigues rotation vector directly to Unity Quaternion.
+        /// Accepts double[] to match OpenCV's native CV_64F precision.
+        /// </summary>
+        /// <param name="rvec">OpenCV rotation vector (Rodrigues format) [rx, ry, rz] as double[3]</param>
+        /// <returns>Unity quaternion</returns>
+        public static Quaternion RodriguesToUnityQuaternion(double[] rvec)
+        {
+            Quaternion opencvQuat = RodriguesToQuaternion(rvec);
+            return ConvertRotationOpenCVToUnity(opencvQuat);
+        }
+
+        /// <summary>
         /// Converts OpenCV translation vector directly to Unity position.
         /// Performs both array conversion and coordinate system transformation.
         /// </summary>
@@ -146,12 +180,49 @@ namespace OpenCvPlugin
         }
 
         /// <summary>
+        /// Converts OpenCV translation vector directly to Unity position.
+        /// Accepts double[] to match OpenCV's native CV_64F precision.
+        /// </summary>
+        /// <param name="tvec">OpenCV translation vector [tx, ty, tz] as double[3]</param>
+        /// <returns>Unity position vector</returns>
+        public static Vector3 TranslationToUnityPosition(double[] tvec)
+        {
+            if (tvec == null || tvec.Length != 3)
+            {
+                Debug.LogError("tvec must be double[3]");
+                return Vector3.zero;
+            }
+
+            Vector3 opencvPos = new Vector3((float)tvec[0], (float)tvec[1], (float)tvec[2]);
+            return ConvertPositionOpenCVToUnity(opencvPos);
+        }
+
+        /// <summary>
         /// Applies OpenCV pose (rvec + tvec) to a Unity Transform.
         /// </summary>
         /// <param name="transform">Unity transform to update</param>
         /// <param name="rvec">OpenCV rotation vector [rx, ry, rz]</param>
         /// <param name="tvec">OpenCV translation vector [tx, ty, tz]</param>
         public static void ApplyPoseToTransform(Transform transform, float[] rvec, float[] tvec)
+        {
+            if (transform == null)
+            {
+                Debug.LogError("Transform is null");
+                return;
+            }
+
+            transform.rotation = RodriguesToUnityQuaternion(rvec);
+            transform.position = TranslationToUnityPosition(tvec);
+        }
+
+        /// <summary>
+        /// Applies OpenCV pose (rvec + tvec) to a Unity Transform.
+        /// Accepts double[] to match OpenCV's native CV_64F precision.
+        /// </summary>
+        /// <param name="transform">Unity transform to update</param>
+        /// <param name="rvec">OpenCV rotation vector [rx, ry, rz] as double[3]</param>
+        /// <param name="tvec">OpenCV translation vector [tx, ty, tz] as double[3]</param>
+        public static void ApplyPoseToTransform(Transform transform, double[] rvec, double[] tvec)
         {
             if (transform == null)
             {

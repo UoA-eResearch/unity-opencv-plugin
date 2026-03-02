@@ -1,10 +1,10 @@
 #pragma once
 
 // ============================================================================
-// PnP Module — Context definition
+// PnP Module — Context definition and helpers
 //
-// The context holds only pre-allocated working memory (scratch buffers).
-// It does NOT retain any pose state between calls — the caller owns rvec/tvec
+// The context holds only the per-instance error message buffer.
+// It does NOT retain any solver state between calls — the caller owns rvec/tvec
 // and passes them in/out each call.
 // ============================================================================
 
@@ -13,20 +13,16 @@
 #include <opencv2/core.hpp>
 
 #include <array>
-#include <vector>
 
 struct PnPContextInternal {
-    // Pre-allocated scratch buffers for converting flat float arrays into
-    // OpenCV point vectors. Reserved to maxPoints at creation time.
-    std::vector<cv::Point3f> objPts;
-    std::vector<cv::Point2f> imgPts;
-
-    // Scratch buffer for projected points (used by ProjectPoints)
-    std::vector<cv::Point2f> projPts;
-
-    // Upper bound on point count, set at creation time.
-    int maxPoints;
-
     // Per-context error message buffer, read via OCP_PnP_GetLastError.
     std::array<char, OCP_ERROR_MSG_SIZE> errorMsg;
 };
+
+// Wrap a read-only raw pointer as a cv::Mat header (zero-copy, zero-alloc).
+// OpenCV's cv::Mat requires non-const void* even for read-only use (InputArray).
+// This is safe: OpenCV's InputArray contract guarantees read-only access.
+// UB would only occur if the data were modified, which does not happen.
+inline cv::Mat matReadOnly(int rows, int cols, int type, const void* data) {
+    return cv::Mat(rows, cols, type, const_cast<void*>(data));
+}

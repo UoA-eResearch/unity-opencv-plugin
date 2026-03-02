@@ -28,16 +28,18 @@ namespace OpenCvPlugin.PnP
     {
         private IntPtr _context;
         private bool _disposed;
-        private readonly int _maxPoints;
 
-        // Persistent pose state for temporal coherence
-        private readonly float[] _rvec = new float[3];  // Rotation vector (Rodrigues)
-        private readonly float[] _tvec = new float[3];  // Translation vector
+        // Pre-allocated buffers — avoids per-call GC allocations
+        private static readonly float[] EmptyDistCoeffs = new float[1];
+        private readonly int[] _inlierCountBuf = new int[1];
 
-        /// <summary>
-        /// Last reprojection error from Solve() in pixels.
-        /// </summary>
-        public float LastReprojectionError { get; private set; }
+        // Persistent pose state for temporal coherence (double precision matches OpenCV's CV_64F)
+        private readonly double[] _rvec = new double[3];  // Rotation vector (Rodrigues)
+        private readonly double[] _tvec = new double[3];  // Translation vector
+
+        // TODO: Remove when SolveRansac/ProjectPoints are refactored to use double[] rvec/tvec
+        private readonly float[] _rvecFloat = new float[3];
+        private readonly float[] _tvecFloat = new float[3];
 
         /// <summary>
         /// Last inlier count from SolveRansac().
@@ -45,29 +47,23 @@ namespace OpenCvPlugin.PnP
         public int LastInlierCount { get; private set; }
 
         /// <summary>
-        /// Current rotation vector (Rodrigues format). Read-only - updated by Solve/SolveRansac.
-        /// To provide initial guess, use Solve with useExtrinsicGuess=true after setting via SetPose.
+        /// Current rotation vector (Rodrigues format, double precision).
+        /// Updated by Solve/SolveRansac. Use GeometryUtils to convert to Unity Quaternion.
         /// </summary>
-        public float[] RotationVector => _rvec;
+        public double[] RotationVector => _rvec;
 
         /// <summary>
-        /// Current translation vector. Read-only - updated by Solve/SolveRansac.
-        /// To provide initial guess, use Solve with useExtrinsicGuess=true after setting via SetPose.
+        /// Current translation vector (double precision).
+        /// Updated by Solve/SolveRansac. Use GeometryUtils to convert to Unity Vector3.
         /// </summary>
-        public float[] TranslationVector => _tvec;
+        public double[] TranslationVector => _tvec;
 
         /// <summary>
         /// Creates a PnP solver context.
         /// </summary>
-        /// <param name="maxPoints">Maximum number of points per solve (4-1000 recommended). 
-        /// Higher values use more memory but support more correspondences.</param>
-        public PnPSolver(int maxPoints = 100)
+        public PnPSolver()
         {
-            if (maxPoints < 4 || maxPoints > 10000)
-                throw new ArgumentOutOfRangeException(nameof(maxPoints), "maxPoints must be between 4 and 10000");
-
-            _maxPoints = maxPoints;
-            _context = PnPNative.OCP_PnP_CreateContext(maxPoints);
+            _context = PnPNative.OCP_PnP_CreateContext();
 
             if (_context == IntPtr.Zero)
                 throw new InvalidOperationException("Failed to create PnP context. Ensure OpenCvPlugin.dll is deployed.");
@@ -77,12 +73,12 @@ namespace OpenCvPlugin.PnP
         /// Manually sets the current pose (rvec/tvec).
         /// Useful for providing initial guess for temporal coherence.
         /// </summary>
-        public void SetPose(float[] rvec, float[] tvec)
+        public void SetPose(double[] rvec, double[] tvec)
         {
             if (rvec == null || rvec.Length != 3)
-                throw new ArgumentException("rvec must be float[3]", nameof(rvec));
+                throw new ArgumentException("rvec must be double[3]", nameof(rvec));
             if (tvec == null || tvec.Length != 3)
-                throw new ArgumentException("tvec must be float[3]", nameof(tvec));
+                throw new ArgumentException("tvec must be double[3]", nameof(tvec));
 
             Array.Copy(rvec, _rvec, 3);
             Array.Copy(tvec, _tvec, 3);
@@ -135,8 +131,6 @@ namespace OpenCvPlugin.PnP
             int imgCount = imagePoints.Length / 2;
             if (objCount != imgCount)
                 throw new ArgumentException("objectPoints and imagePoints must have same number of points");
-            if (objCount > _maxPoints)
-                throw new ArgumentException($"Point count {objCount} exceeds maxPoints {_maxPoints}");
 
             if (cameraMatrix == null || cameraMatrix.Length != 9)
                 throw new ArgumentException("cameraMatrix must be float[9] = [fx,0,cx, 0,fy,cy, 0,0,1]", nameof(cameraMatrix));
@@ -149,7 +143,7 @@ namespace OpenCvPlugin.PnP
             int distCoeffCount;
             if (distCoeffs == null || distCoeffs.Length == 0)
             {
-                distCoeffsToUse = new float[1];  // Dummy array, will be ignored by native code
+                distCoeffsToUse = EmptyDistCoeffs;
                 distCoeffCount = 0;
             }
             else
@@ -161,8 +155,7 @@ namespace OpenCvPlugin.PnP
             if (distCoeffCount != 0 && distCoeffCount != 5)
                 throw new ArgumentException("distCoeffs must be null, empty, or length 5", nameof(distCoeffs));
 
-            // Call native function
-            float[] reprojErrorArray = new float[1];
+            // Call native function — rvec/tvec written in-place (double precision, zero copy-back)
             int status = PnPNative.OCP_PnP_Solve(
                 _context,
                 objectPoints,
@@ -174,10 +167,7 @@ namespace OpenCvPlugin.PnP
                 method,
                 useExtrinsicGuess ? 1 : 0,
                 _rvec,
-                _tvec,
-                reprojErrorArray);
-
-            LastReprojectionError = reprojErrorArray[0];
+                _tvec);
 
             // Handle result
             if (status == OpenCvPluginNative.OCP_OK)
@@ -234,8 +224,6 @@ namespace OpenCvPlugin.PnP
             int imgCount = imagePoints.Length / 2;
             if (objCount != imgCount)
                 throw new ArgumentException("objectPoints and imagePoints must have same number of points");
-            if (objCount > _maxPoints)
-                throw new ArgumentException($"Point count {objCount} exceeds maxPoints {_maxPoints}");
 
             if (cameraMatrix == null || cameraMatrix.Length != 9)
                 throw new ArgumentException("cameraMatrix must be float[9] = [fx,0,cx, 0,fy,cy, 0,0,1]", nameof(cameraMatrix));
@@ -249,7 +237,7 @@ namespace OpenCvPlugin.PnP
             int distCoeffCount;
             if (distCoeffs == null || distCoeffs.Length == 0)
             {
-                distCoeffsToUse = new float[1];  // Dummy array, will be ignored by native code
+                distCoeffsToUse = EmptyDistCoeffs;
                 distCoeffCount = 0;
             }
             else
@@ -261,8 +249,11 @@ namespace OpenCvPlugin.PnP
             if (distCoeffCount != 0 && distCoeffCount != 5)
                 throw new ArgumentException("distCoeffs must be null, empty, or length 5", nameof(distCoeffs));
 
+            // TODO: Remove float conversion when SolveRansac is refactored to use double[]
+            _rvecFloat[0] = (float)_rvec[0]; _rvecFloat[1] = (float)_rvec[1]; _rvecFloat[2] = (float)_rvec[2];
+            _tvecFloat[0] = (float)_tvec[0]; _tvecFloat[1] = (float)_tvec[1]; _tvecFloat[2] = (float)_tvec[2];
+
             // Call native function
-            int[] inlierCountArray = new int[1];
             int status = PnPNative.OCP_PnP_SolveRansac(
                 _context,
                 objectPoints,
@@ -276,13 +267,16 @@ namespace OpenCvPlugin.PnP
                 iterationsCount,
                 reprojectionError,
                 confidence,
-                _rvec,
-                _tvec,
+                _rvecFloat,
+                _tvecFloat,
                 inlierIndices,
-                inlierCountArray,
+                _inlierCountBuf,
                 objCount);  // maxInliers
 
-            LastInlierCount = inlierCountArray[0];
+            // Copy results back to double precision
+            _rvec[0] = _rvecFloat[0]; _rvec[1] = _rvecFloat[1]; _rvec[2] = _rvecFloat[2];
+            _tvec[0] = _tvecFloat[0]; _tvec[1] = _tvecFloat[1]; _tvec[2] = _tvecFloat[2];
+            LastInlierCount = _inlierCountBuf[0];
 
             // Handle result
             if (status == OpenCvPluginNative.OCP_OK)
@@ -318,8 +312,6 @@ namespace OpenCvPlugin.PnP
                 throw new ArgumentException("objectPoints length must be multiple of 3", nameof(objectPoints));
 
             int count = objectPoints.Length / 3;
-            if (count > _maxPoints)
-                throw new ArgumentException($"Point count {count} exceeds maxPoints {_maxPoints}");
 
             if (cameraMatrix == null || cameraMatrix.Length != 9)
                 throw new ArgumentException("cameraMatrix must be float[9] = [fx,0,cx, 0,fy,cy, 0,0,1]", nameof(cameraMatrix));
@@ -333,7 +325,7 @@ namespace OpenCvPlugin.PnP
             int distCoeffCount;
             if (distCoeffs == null || distCoeffs.Length == 0)
             {
-                distCoeffsToUse = new float[1];  // Dummy array, will be ignored by native code
+                distCoeffsToUse = EmptyDistCoeffs;
                 distCoeffCount = 0;
             }
             else
@@ -345,13 +337,17 @@ namespace OpenCvPlugin.PnP
             if (distCoeffCount != 0 && distCoeffCount != 5)
                 throw new ArgumentException("distCoeffs must be null, empty, or length 5", nameof(distCoeffs));
 
+            // TODO: Remove float conversion when ProjectPoints is refactored to use double[]
+            _rvecFloat[0] = (float)_rvec[0]; _rvecFloat[1] = (float)_rvec[1]; _rvecFloat[2] = (float)_rvec[2];
+            _tvecFloat[0] = (float)_tvec[0]; _tvecFloat[1] = (float)_tvec[1]; _tvecFloat[2] = (float)_tvec[2];
+
             // Call native function
             int status = PnPNative.OCP_PnP_ProjectPoints(
                 _context,
                 objectPoints,
                 count,
-                _rvec,
-                _tvec,
+                _rvecFloat,
+                _tvecFloat,
                 cameraMatrix,
                 distCoeffsToUse,
                 distCoeffCount,
