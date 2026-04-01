@@ -1,4 +1,4 @@
-# OpenCvPlugin
+# Unity OpenCV Plugin
 
 A lightweight native C++ plugin that wraps selected [OpenCV](https://opencv.org/) functions for use in Unity via P/Invoke. It is not intended as a general-purpose OpenCV binding, though it may expand over time. Currently it covers PnP pose estimation; new modules can be added by following the same pattern — see *Adding a new module* below.
 
