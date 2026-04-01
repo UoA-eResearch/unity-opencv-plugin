@@ -9,6 +9,10 @@
     "name": "UoA eResearch",
     "url": "https://github.com/UoA-eResearch"
   },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/UoA-eResearch/unity-opencv-plugin.git"
+  },
   "keywords": [
     "opencv",
     "pnp",
