@@ -5,7 +5,6 @@ namespace OpenCvPlugin
 {
     /// <summary>
     /// Core plugin infrastructure: version checking and status codes.
-    /// Deploy both OpenCvPlugin.dll and opencv_world4120.dll to Unity's Plugins folder.
     /// </summary>
     public static class OpenCvPluginNative
     {
@@ -36,7 +35,7 @@ namespace OpenCvPlugin
             {
                 throw new InvalidOperationException(
                     $"OpenCvPlugin version mismatch: expected {expectedVersion}, got {actualVersion}. " +
-                    "Ensure OpenCvPlugin.dll in Plugins folder matches this C# wrapper version.");
+                    "Ensure the native plugin version matches the C# wrapper version.");
             }
         }
 

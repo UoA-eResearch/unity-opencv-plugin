@@ -30,8 +30,7 @@ namespace OpenCvPlugin.PnP
         private IntPtr _context;
         private bool _disposed;
 
-        // Pre-allocated dummy buffer — avoids per-call GC allocation when distortion is unused.
-        // Passed as a valid pointer with distCoeffCount=0 so the native side gets a non-null pointer.
+        // P/Invoke with [In] float[] cannot pin a null reference, so we pass this when distortion is unused.
         private static readonly float[] EmptyDistCoeffs = new float[1];
 
         /// <summary>
@@ -97,10 +96,6 @@ namespace OpenCvPlugin.PnP
             if (tvecInOut == null || tvecInOut.Length != 3)
                 throw new ArgumentException("tvecInOut must be double[3]", nameof(tvecInOut));
 
-            // Prepare distortion coefficients.
-            // Note: We must pass a valid array pointer even if distCoeffCount=0
-            // because the P/Invoke marshaler with [In] attribute can't handle null.
-            // Using a pre-allocated dummy array when no distortion is specified.
             float[] distCoeffsToUse;
             int distCoeffCount;
             if (distCoeffs == null || distCoeffs.Length == 0)
@@ -117,7 +112,7 @@ namespace OpenCvPlugin.PnP
             if (distCoeffCount != 0 && distCoeffCount != 5)
                 throw new ArgumentException("distCoeffs must be null, empty, or length 5", nameof(distCoeffs));
 
-            // Call native function — results written directly into caller's rvecInOut/tvecInOut buffers
+            // Call native — results written directly into caller's rvecInOut/tvecInOut buffers
             int status = PnPNative.OCP_PnP_Solve(
                 _context,
                 objectPoints,
@@ -179,9 +174,6 @@ namespace OpenCvPlugin.PnP
             if (imagePointsOut == null || imagePointsOut.Length < count * 2)
                 throw new ArgumentException("imagePointsOut must have length >= objectPoints.Length * 2 / 3", nameof(imagePointsOut));
 
-            // Prepare distortion coefficients.
-            // Note: We must pass a valid array pointer even if distCoeffCount=0
-            // because the P/Invoke marshaler with [In] attribute can't handle null.
             float[] distCoeffsToUse;
             int distCoeffCount;
             if (distCoeffs == null || distCoeffs.Length == 0)
@@ -198,7 +190,7 @@ namespace OpenCvPlugin.PnP
             if (distCoeffCount != 0 && distCoeffCount != 5)
                 throw new ArgumentException("distCoeffs must be null, empty, or length 5", nameof(distCoeffs));
 
-            // Call native function — rvec/tvec passed directly (double precision, zero copy)
+            // Call native — rvec/tvec passed directly as double[], zero copy
             int status = PnPNative.OCP_PnP_ProjectPoints(
                 _context,
                 objectPoints,

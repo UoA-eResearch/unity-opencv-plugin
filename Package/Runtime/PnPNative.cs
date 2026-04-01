@@ -4,8 +4,8 @@ using System.Runtime.InteropServices;
 namespace OpenCvPlugin.PnP
 {
     /// <summary>
-    /// Low-level P/Invoke declarations for OpenCV PnP (Pose-n-Perspective) functions.
-    /// All functions use opaque context handles and C-compatible signatures for stability.
+    /// Low-level P/Invoke declarations for OpenCV PnP (Perspective-n-Point) functions.
+    /// All functions use opaque context handles and a C-compatible ABI.
     /// </summary>
     public static class PnPNative
     {

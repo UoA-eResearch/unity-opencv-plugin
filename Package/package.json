@@ -1,0 +1,26 @@
+{
+  "name": "com.github.uoa-eresearch.unity-opencv-plugin",
+  "version": "1.0.0",
+  "displayName": "Unity OpenCV Plugin",
+  "description": "Lightweight OpenCV integration for Unity. Currently provides PnP (Perspective-n-Point) pose estimation and geometry utilities for OpenCV-Unity coordinate system conversion.",
+  "unity": "2020.3",
+  "license": "Apache-2.0",
+  "author": {
+    "name": "UoA eResearch",
+    "url": "https://github.com/UoA-eResearch"
+  },
+  "keywords": [
+    "opencv",
+    "pnp",
+    "pose-estimation",
+    "computer-vision",
+    "native-plugin"
+  ],
+  "samples": [
+    {
+      "displayName": "Basic Usage",
+      "description": "MonoBehaviour demonstrating PnP solve, temporal coherence, and Unity coordinate conversion.",
+      "path": "Samples~/BasicUsage"
+    }
+  ]
+}

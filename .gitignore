@@ -1,2 +1,4 @@
+build/
 
-build/*
+# Unity package DLLs are tracked via Git LFS (committed at release time).
+# Do not add Package/Plugins/**/*.dll here — they need to be in git for UPM consumers.

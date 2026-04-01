@@ -1,3 +1,4 @@
+using System;
 using UnityEngine;
 
 namespace OpenCvPlugin
@@ -239,20 +240,16 @@ namespace OpenCvPlugin
         // ========================================
 
         /// <summary>
-        /// Computes OpenCV camera intrinsic matrix from Unity Camera.
-        /// Returns 3x3 matrix in row-major format as float[9] = [fx,0,cx, 0,fy,cy, 0,0,1]
-        /// Note: Assumes no lens distortion - for real AR/webcam applications,
-        /// perform proper camera calibration and pass distortion coefficients separately.
+        /// Computes an OpenCV camera intrinsic matrix from a Unity Camera using its field of view.
+        /// Returns a 3x3 row-major matrix as float[9] = [fx,0,cx, 0,fy,cy, 0,0,1].
+        /// Assumes square pixels, centred principal point, and no lens distortion.
         /// </summary>
         /// <param name="camera">Unity camera to extract intrinsics from</param>
         /// <returns>Camera matrix as float[9] in row-major order</returns>
         public static float[] GetCameraMatrix(Camera camera)
         {
             if (camera == null)
-            {
-                Debug.LogError("Camera is null");
-                return new float[] { 800f, 0f, 640f, 0f, 800f, 360f, 0f, 0f, 1f }; // Fallback defaults
-            }
+                throw new ArgumentNullException(nameof(camera));
 
             // Compute focal length from field of view
             // For vertical FOV: fy = (height/2) / tan(vFOV/2)
@@ -273,8 +270,8 @@ namespace OpenCvPlugin
         }
 
         /// <summary>
-        /// Computes OpenCV camera intrinsic matrix from explicit parameters.
-        /// Useful when you know exact camera properties or want to override Unity camera settings.
+        /// Constructs a camera intrinsic matrix from a single focal length, assuming square pixels
+        /// and a centred principal point.
         /// </summary>
         /// <param name="focalLengthPixels">Focal length in pixels (same for X and Y if square pixels)</param>
         /// <param name="imageWidth">Image width in pixels</param>
